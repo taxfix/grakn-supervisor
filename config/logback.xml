@@ -1,0 +1,28 @@
+<configuration debug="false">
+
+
+    <!--Configure the standard out appender used to print the Grakn logo-->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="INFO"/>
+
+    <logger name="org.eclipse.jetty" level="ERROR}">
+        <appender-ref ref="STDOUT"/>
+    </logger>
+
+    <!--All GRAKN logs go to main log file-->
+    <logger name="grakn.core" level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </logger>
+
+    <!--Only show ERROR logs from apache classes-->
+    <logger name="org.apache" level="ERROR">
+        <appender-ref ref="STDOUT"/>
+    </logger>
+
+
+</configuration>
