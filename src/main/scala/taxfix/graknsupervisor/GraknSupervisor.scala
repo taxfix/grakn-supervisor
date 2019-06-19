@@ -44,6 +44,12 @@ object GraknSupervisor extends App {
     handleProcessExit("Server", serverProcess.exitValue())
   }
 
+  GraknProbe.start().recover({
+    case e =>
+      log.log("supervisor",  Map[String, Object]("message" -> s"Grakn probe failed: ${e.getMessage}", "severity" -> 500.asInstanceOf[Integer]).asJava)
+      killAllProcess()
+  })
+
   // wait util both processes exit
   Await.result(Future.sequence(Seq(storageExitFuture, serverExitFuture)), Duration.Inf)
   if(!killed) handleSupervisorExit()
@@ -61,7 +67,7 @@ object GraknSupervisor extends App {
 
   def logger(processName: String) = ProcessLogger(
     stdoutLine => log.log(processName, "message", stdoutLine),
-    stderrLine => log.log(processName, Map[String, Object]("message" -> stderrLine, "severity" -> 500).asJava)
+    stderrLine => log.log(processName, Map[String, Object]("message" -> stderrLine, "severity" -> 500.asInstanceOf[Integer]).asJava)
   )
 
   def logbackConfig = Paths.get("config", "logback.xml").toAbsolutePath
