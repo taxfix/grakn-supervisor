@@ -8,21 +8,22 @@ import org.fluentd.logger.FluentLogger
 
 import scala.sys.process._
 import sun.misc.Signal
+
 import scala.jdk.CollectionConverters._
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.{Success, Try}
 
 object GraknSupervisor extends App {
 
   val log = FluentLogger.getLogger("grakn")
 
-  implicit val execturContext = ExecutionContext.global
+  implicit val executionContext = ExecutionContext.global
 
   val config = ConfigFactory.load()
   val graknHome = config.getString("grakn.home")
 
   val storageProcess = startStorage()
-  Thread.sleep(10000) // let's wait for storage to start
   val serverProcess = startServer()
 
   // magic flag to know if are shutting down because of kill signal
@@ -59,11 +60,13 @@ object GraknSupervisor extends App {
 
 
   def startStorage() = {
-    log.log("supervisor", "message", "Starting Grakn Storage")
+    log.log("supervisor", "messa38217ge", "Starting Grakn Storage")
     Process(graknStorageCommand(), new File(graknHome)).run(logger("storage"))
   }
 
   def startServer() = {
+    waitUntilStorageReady()
+    log.log("supervisor", "message", "Grakn Storage started SUCCESSFULLY")
     log.log("supervisor", "message", "Starting Grakn Server")
     Process(graknServerCommand(), new File(graknHome)).run(logger("server"))
   }
@@ -73,16 +76,30 @@ object GraknSupervisor extends App {
     stderrLine => log.log(processName, Map[String, Object]("message" -> stderrLine, "severity" -> 500.asInstanceOf[Integer]).asJava)
   )
 
+  def waitUntilStorageReady(attempts: Int = 0): Unit = {
+    if(attempts > 60) {
+      log.log("supervisor",  Map[String, Object]("message" -> "Unable to start storage after 5 min. Giving up!", "severity" -> 500.asInstanceOf[Integer]).asJava)
+      kill()
+    }
+    Try(nodeToolCommand().!!) match {
+      case Success(output) =>
+        if(output.trim == "running") return
+      case _ =>
+    }
+    Thread.sleep(5000)
+    waitUntilStorageReady(attempts + 1)
+  }
+
   def logbackConfig = Paths.get("config", "logback.xml").toAbsolutePath
 
-  def graknStorageCommand() = {
+  def graknStorageCommand(): String = {
     val graknConfig = s"$graknHome/server/conf/grakn.properties"
     val serviceLibClasspath = s"$graknHome/server/services/lib/*"
     val cassandraClasspath = s"$graknHome/server/services/cassandra/"
     val configClasspath = s"$graknHome/server/conf/"
     val classpath = s"$serviceLibClasspath:$cassandraClasspath:$configClasspath"
     val storagePidFile = Paths.get(System.getProperty("java.io.tmpdir"), "grakn-storage.pid")
-    s"""java ${config.getString("grakn.storage.javaOpts")} -cp "$classpath" -Dgrakn.dir="$graknHome" -Dgrakn.conf="$graknConfig" grakn.core.server.GraknStorage -Dlogback.configurationFile=$logbackConfig -Dcassandra.logdir=$graknHome/logs -Dcassandra-pidfile=$storagePidFile -Dcassandra.jmx.local.port=7199 -XX:+CrashOnOutOfMemoryError"""
+    s"""java ${config.getString("grakn.storage.javaOpts")} -cp "$classpath" -Dgrakn.dir="$graknHome" -Dgrakn.conf="$graknConfig" -Dlogback.configurationFile=$logbackConfig -Dcassandra.logdir=$graknHome/logs -Dcassandra-pidfile=$storagePidFile -Dcassandra.jmx.local.port=7199 -XX:+CrashOnOutOfMemoryError grakn.core.server.GraknStorage"""
   }
 
   def graknServerCommand() = {
@@ -96,9 +113,16 @@ object GraknSupervisor extends App {
     s"""java ${config.getString("grakn.server.javaOpts")} -cp "$classpath" -Dgrakn.dir="$graknHome" -Dgrakn.conf="$graknConfig" -Dgrakn.pidfile=$serverPidFile -Dlogback.configurationFile=$logbackConfig -Dhadoop.home.dir="$hadoopPath" grakn.core.server.Grakn"""
   }
 
+  def nodeToolCommand(): String = {
+    val serviceLibClasspath = s"$graknHome/server/services/lib/*"
+    val configClasspath = s"$graknHome/server/conf/"
+    val classpath = s"$serviceLibClasspath:$configClasspath"
+    s"""java -cp "$classpath"  -Dlogback.configurationFile=$logbackConfig org.apache.cassandra.tools.NodeTool statusthrift"""
+  }
+
   def killAllProcess() = {
-    if (storageProcess.isAlive()) storageProcess.destroy()
-    if (serverProcess.isAlive()) serverProcess.destroy()
+    if (storageProcess != null && storageProcess.isAlive()) storageProcess.destroy()
+    if (serverProcess != null && serverProcess.isAlive()) serverProcess.destroy()
   }
 
   def handleSupervisorExit() = {
