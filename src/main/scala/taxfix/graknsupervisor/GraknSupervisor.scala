@@ -60,7 +60,7 @@ object GraknSupervisor extends App {
 
 
   def startStorage() = {
-    log.log("supervisor", "messa38217ge", "Starting Grakn Storage")
+    log.log("supervisor", "message", "Starting Grakn Storage")
     Process(graknStorageCommand(), new File(graknHome)).run(logger("storage"))
   }
 
