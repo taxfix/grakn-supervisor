@@ -20,4 +20,4 @@ mainClass in Compile := Some("taxfix.graknsupervisor.GraknSupervisor")
 
 // Add macro binary to the resulting package
 mappings in Universal += file("config/logback.xml") -> "config/logback.xml"
-bashScriptExtraDefines += """addJava "-Duser.dir=${app_home}""""
+bashScriptExtraDefines += """addJava "-Duser.dir=${app_home}/..""""
