@@ -29,11 +29,14 @@ object GraknSupervisor extends App {
   var killed = false
 
   // Setup the callback for exit signal to shutdown Grakn gracefully
-  Signal.handle(new Signal("INT"), (_: Signal) => {
+  Signal.handle(new Signal("INT"), (_: Signal) => kill())
+  Signal.handle(new Signal("TERM"), (_: Signal) => kill())
+
+  def kill() = {
     killed = true
     log.log("supervisor", "message", s"Received kill signal! Stopping all Grakn processes")
     handleSupervisorExit()
-  })
+  }
 
 
   val storageExitFuture = Future {
