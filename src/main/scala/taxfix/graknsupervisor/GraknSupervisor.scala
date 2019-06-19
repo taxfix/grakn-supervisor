@@ -57,7 +57,7 @@ object GraknSupervisor extends App {
 
   def startStorage() = {
     log.log("supervisor", "message", "Starting Grakn Storage")
-    Process(graknDaemonCommand(), new File(graknHome)).run(logger("storage"))
+    Process(graknStorageCommand(), new File(graknHome)).run(logger("storage"))
   }
 
   def startServer() = {
@@ -72,14 +72,14 @@ object GraknSupervisor extends App {
 
   def logbackConfig = Paths.get("config", "logback.xml").toAbsolutePath
 
-  def graknDaemonCommand() = {
+  def graknStorageCommand() = {
     val graknConfig = s"$graknHome/server/conf/grakn.properties"
     val serviceLibClasspath = s"$graknHome/server/services/lib/*"
     val cassandraClasspath = s"$graknHome/server/services/cassandra/"
     val configClasspath = s"$graknHome/server/conf/"
     val classpath = s"$serviceLibClasspath:$cassandraClasspath:$configClasspath"
     val storagePidFile = Paths.get(System.getProperty("java.io.tmpdir"), "grakn-storage.pid")
-    s"""java -cp "$classpath" -Dgrakn.dir="$graknHome" -Dgrakn.conf="$graknConfig" grakn.core.server.GraknStorage -Dlogback.configurationFile=$logbackConfig -Dcassandra.logdir=$graknHome/logs -Dcassandra-pidfile=$storagePidFile -Dcassandra.jmx.local.port=7199 -XX:+CrashOnOutOfMemoryError"""
+    s"""java ${config.getString("grakn.storage.javaOpts")} -cp "$classpath" -Dgrakn.dir="$graknHome" -Dgrakn.conf="$graknConfig" grakn.core.server.GraknStorage -Dlogback.configurationFile=$logbackConfig -Dcassandra.logdir=$graknHome/logs -Dcassandra-pidfile=$storagePidFile -Dcassandra.jmx.local.port=7199 -XX:+CrashOnOutOfMemoryError"""
   }
 
   def graknServerCommand() = {
@@ -90,7 +90,7 @@ object GraknSupervisor extends App {
     val hadoopPath = s"$graknHome/server/services/hadoop"
     val serverPidFile = Paths.get(System.getProperty("java.io.tmpdir"), "grakn-core-server.pid")
 
-    s"""java -cp "$classpath" -Dgrakn.dir="$graknHome" -Dgrakn.conf="$graknConfig" -Dgrakn.pidfile=$serverPidFile -Dlogback.configurationFile=$logbackConfig -Dhadoop.home.dir="$hadoopPath" grakn.core.server.Grakn"""
+    s"""java ${config.getString("grakn.server.javaOpts")} -cp "$classpath" -Dgrakn.dir="$graknHome" -Dgrakn.conf="$graknConfig" -Dgrakn.pidfile=$serverPidFile -Dlogback.configurationFile=$logbackConfig -Dhadoop.home.dir="$hadoopPath" grakn.core.server.Grakn"""
   }
 
   def killAllProcess() = {
