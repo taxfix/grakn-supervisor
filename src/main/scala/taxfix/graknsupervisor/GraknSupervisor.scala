@@ -1,7 +1,8 @@
 package taxfix.graknsupervisor
 
 import java.io.File
-import java.nio.file.Paths
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Path, Paths}
 
 import com.typesafe.config.ConfigFactory
 import org.fluentd.logger.FluentLogger
@@ -22,6 +23,9 @@ object GraknSupervisor extends App {
 
   val config = ConfigFactory.load()
   val graknHome = config.getString("grakn.home")
+  val storagePidFile = Paths.get(System.getProperty("java.io.tmpdir"), "grakn-storage.pid")
+  val serverPidFile = Paths.get(System.getProperty("java.io.tmpdir"), "grakn-core-server.pid")
+
 
   val storageProcess = startStorage()
   val serverProcess = startServer()
@@ -98,7 +102,6 @@ object GraknSupervisor extends App {
     val cassandraClasspath = s"$graknHome/server/services/cassandra/"
     val configClasspath = s"$graknHome/server/conf/"
     val classpath = s"$serviceLibClasspath:$cassandraClasspath:$configClasspath"
-    val storagePidFile = Paths.get(System.getProperty("java.io.tmpdir"), "grakn-storage.pid")
     s"""java ${config.getString("grakn.storage.javaOpts")} -cp "$classpath" -Dgrakn.dir="$graknHome" -Dgrakn.conf="$graknConfig" -Dlogback.configurationFile=$logbackConfig -Dcassandra.logdir=$graknHome/logs -Dcassandra-pidfile=$storagePidFile -Dcassandra.jmx.local.port=7199 -XX:+CrashOnOutOfMemoryError grakn.core.server.GraknStorage"""
   }
 
@@ -108,7 +111,6 @@ object GraknSupervisor extends App {
     val configClasspath = s"$graknHome/server/conf/"
     val classpath = s"$serviceLibClasspath:$configClasspath"
     val hadoopPath = s"$graknHome/server/services/hadoop"
-    val serverPidFile = Paths.get(System.getProperty("java.io.tmpdir"), "grakn-core-server.pid")
 
     s"""java ${config.getString("grakn.server.javaOpts")} -cp "$classpath" -Dgrakn.dir="$graknHome" -Dgrakn.conf="$graknConfig" -Dgrakn.pidfile=$serverPidFile -Dlogback.configurationFile=$logbackConfig -Dhadoop.home.dir="$hadoopPath" grakn.core.server.Grakn"""
   }
@@ -121,8 +123,20 @@ object GraknSupervisor extends App {
   }
 
   def killAllProcess() = {
+    killStorageProcess()
+    killServerProcess()
+  }
+
+  def killStorageProcess() =
     if (storageProcess != null && storageProcess.isAlive()) storageProcess.destroy()
-    if (serverProcess != null && serverProcess.isAlive()) serverProcess.destroy()
+
+  def killServerProcess() = {
+    if (serverProcess != null && serverProcess.isAlive()) {
+      val pid = retrievePid(serverPidFile)
+      if(pid != null) {
+        s"kill -9 ${pid}".!
+      }
+    }
   }
 
   def handleSupervisorExit() = {
@@ -134,6 +148,13 @@ object GraknSupervisor extends App {
   def handleProcessExit(processName: String, statusCode: Int) = {
     if(!killed) log.log("supervisor", "message", s"Grakn $processName exit with status code: $statusCode")
     killAllProcess()
+  }
+
+  def retrievePid(pidFile: Path): String = {
+    if (pidFile.toFile.exists) {
+      Try(new String(Files.readAllBytes(pidFile), StandardCharsets.UTF_8).trim()).getOrElse(null)
+    }
+    else null
   }
 
 }
